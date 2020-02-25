@@ -1,0 +1,77 @@
+---
+title: "hw1"
+author: "David DeStephano"
+date: "February 25, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(RNHANES)
+library(tidyverse)
+library(summarytools)
+library(stargazer)
+library(leaps)
+library(caret)
+library(ModelMetrics)
+library(pls)
+```
+
+#Import the data
+```{r}
+test<-read_csv("solubility_test.csv")
+
+train<-read_csv("solubility_train.csv")
+```
+
+
+#Linear Model
+```{r}
+fit_lm <-lm(Solubility~., data = train)
+pred_lm <-predict(fit_lm, test)
+mse(train$Solubility, pred_lm)
+```
+
+
+#Preprocess data for ML
+```{r}
+x <-model.matrix(Solubility~.,train)[,-1]
+y <- train$Solubility
+
+# test data
+x2 <-model.matrix(Solubility~.,test)[,-1]
+y2 <- test$Solubility
+```
+
+
+
+#Ridge regression
+```{r}
+ctrl1 <-trainControl(method = "repeatedcv", number = 10, repeats = 5)
+# you can try other options
+
+set.seed(2)
+
+ridge.fit <-train(x, y,
+                  method = "glmnet",
+                  tuneGrid =expand.grid(alpha = 0,
+                                        lambda=exp(seq(-1, 10, length=100))),
+                  # preProc = c("center","scale"),
+                  trControl = ctrl1)
+
+predy2.ridge <-predict(ridge.fit, newdata = x2)
+
+mse(y2, predy2.ridge)
+```
+
+#Checking paramters and best lambda value
+```{r}
+plot(ridge.fit, xTrans =function(x)log(x))
+
+ridge.fit$bestTune
+
+coef(ridge.fit$finalModel,ridge.fit$bestTune$lambda)
+```
