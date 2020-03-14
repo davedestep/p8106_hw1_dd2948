@@ -2,14 +2,14 @@
 title: "hw1"
 author: "David DeStephano"
 date: "February 25, 2020"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r  message=FALSE, warning = FALSE}
 library(RNHANES)
 library(tidyverse)
 library(summarytools)
@@ -21,18 +21,19 @@ library(pls)
 ```
 
 #Import the data
-```{r}
+```{r message=FALSE, warning = FALSE}
 test<-read_csv("solubility_test.csv")
 
 train<-read_csv("solubility_train.csv")
 ```
 
 
-#Linear Model
+
 ```{r}
-fit_lm <-lm(Solubility~., data = train)
-pred_lm <-predict(fit_lm, test)
-mse(test$Solubility, pred_lm)
+#Linear Model
+#fit_lm <-lm(Solubility~., data = train)
+#pred_lm <-predict(fit_lm, test)
+#mse(test$Solubility, pred_lm)
 ```
 
 #Preprocess data for ML
@@ -46,8 +47,7 @@ y2 <- test$Solubility
 ```
 
 ```{r}
-#
-xTrans <- preProcess(train)
+preProcess(train)
 #trainDescr <- predict(xTrans, train)
 #xTrans <- preProcess(trainDescr)
 ```
@@ -58,48 +58,74 @@ All variables are already centered and scaled
 ctrl1 <-trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
 set.seed(2)
+
+
+#ctrl1 <-trainControl(method = "none")
+#Since we have a validation set already.. However this does not allow us to resample and check different values of lambda
 ```
 
 #Linear model using Caret
-```{r}
-lm.fit <-train(x, y,method = "lm",trControl = ctrl1)
+```{r message=FALSE, warning = FALSE}
+lm.fit <-train(x, y, method = "lm",trControl = ctrl1)
 
 predy2.lm <-predict(lm.fit, newdata = x2)
 
 mse(y2, predy2.lm)
 
 ```
+The test MSE of the linear model is 0.5558898
 
 #Ridge regression
 ```{r}
+# ridge.fit <-train(x, y,
+#                   method = "glmnet",
+#                   tuneGrid =expand.grid(alpha = 0,
+#                                         lambda=exp(seq(-1, 10, length=100))),
+#                   #preProc = c("center","scale"),
+#                   trControl = ctrl1)
+
 ridge.fit <-train(x, y,
                   method = "glmnet",
                   tuneGrid =expand.grid(alpha = 0,
-                                        lambda=exp(seq(-1, 10, length=100))),
+                                        lambda=seq(0.0001, 1, length=100)),
                   #preProc = c("center","scale"),
                   trControl = ctrl1)
+
 
 predy2.ridge <-predict(ridge.fit, newdata = x2)
 
 mse(y2, predy2.ridge)
 ```
 
+
 ##Checking paramters and best lambda value
 ```{r}
-plot(ridge.fit, xTrans =function(x)log(x))
-
+#plot(ridge.fit, xTrans =function(x)log(x))
+plot(ridge.fit, xTrans =function(x)(x))
 ridge.fit$bestTune
 
 #coef(ridge.fit$finalModel,ridge.fit$bestTune$lambda)
 ```
+
+
+The test MSE of the ridge regression model is 0.5134603. The ideal lambda is 0.1213 when using cross validation. Before changing the grid of possible lambdas, the cross validated lambda was 0.3679, which is the same as exp(-1), which was the smallest possible value in the original code. This made me think that perhaps our grid was too restrictive.
+
 #Lasso regression
 ```{r}
+# lasso.fit <-train(x, y,
+#                   method = "glmnet",
+#                   tuneGrid =expand.grid(alpha = 1,
+#                                       lambda=exp(seq(-1, 5, length=100))),
+#                   #preProc = c("center","scale"),
+#                   trControl = ctrl1)
+
 lasso.fit <-train(x, y,
                   method = "glmnet",
                   tuneGrid =expand.grid(alpha = 1,
-                                      lambda=exp(seq(-1, 10, length=100))),
+                                      lambda=seq(0.0001, 1, length=100)),
                   #preProc = c("center","scale"),
                   trControl = ctrl1)
+
 
 predy2.lasso <-predict(lasso.fit, newdata = x2)
 
@@ -108,14 +134,14 @@ mse(y2, predy2.lasso)
 
 ##Checking paramters and best lambda value
 ```{r}
-plot(lasso.fit, xTrans =function(x) log(x))
+plot(lasso.fit, xTrans =function(x)(x))
 
 lasso.fit$bestTune
 
 coef(lasso.fit$finalModel,lasso.fit$bestTune$lambda)
 ```
 
-The test error is 1.328538, and there were 8 variables with non-zero coefficient estimates
+The test error depends on the lambda chosen,in this case it is 0.5023035. There were 112 variables with non-zero coefficient estimates. This is relatively high as I allowed the tuning parameter to be close to zero. Lambda was 0.0102, which is much lower than the tuning parameter when using the code from the notes (why is the minimum lambda in the code from the notes only 0.3678?) 
 
 #Principal component regression
 ```{r}
@@ -123,21 +149,21 @@ pcr.fit <-train(x, y,
                 method = "pcr",
                 tuneGrid  =data.frame(ncomp = 1:228),
                 trControl = ctrl1,
-                #preProc =c("center", "scale"))
+                preProc =c("center", "scale"))
 
 
 predy2.pcr4 <-predict(pcr.fit, newdata = x2)
 mse(y2, predy2.pcr4)
 ```
+The test MSE of the PCR model is 0.5489785
 
-The test error is 0.5489785 and M is 160
 
 ```{r}
 ggplot(pcr.fit, highlight = TRUE)+ theme_bw()
 pcr.fit$bestTune
 ```
 
-
+The test error is 0.5489785 and M is 157
 
 
 
@@ -153,13 +179,12 @@ resamp <- resamples(list(lm=lm.fit,
 summary(resamp)
 ```
 
+When calculating the test MSE, we get similar values for eaach model, but our lasso model has the lowest of 0.5. We can also calculate the RMSE for each model using only the training data, where we also find that the lasso model has the lowest error. Results for lasso and ridge regression were based on a custom tuning grid that was chosen using cross validation with range .0001, 1. It appears that shrinkage was not high in either the ridge or lasso (more so in the lasso). 
+
+
 
 #(f) Which model will you choose for predicting solubility?
-I would chose the ridge regression model as it has the lowest MSE
+I would chose the lasso regression model as it has the lowest test MSE and RMSE
 
 
 
-
-#######
-#How do i use training data to find best model?
-#Also validation set is not cross validation...
